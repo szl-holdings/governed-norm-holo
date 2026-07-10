@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Governed Norms — WILLAY refusal classifiers · SZL Holdings</title>
+<meta name="description" content="Holographic, inspectable rendering of the a11oy WILLAY refusal classifiers — fetched live and keyless. The inverse of a hidden classifier: every rule discloses category, intent, rationale and lineage."/>
+<!-- 0 runtime CDN. System fonts only. Live data fetched client-side from the keyless
+     a11oy endpoint /api/a11oy/v1/willay/classifiers. Honest labels: REPORTED (a11oy
+     self-report, relayed not measured here) · UNAVAILABLE (endpoint unreachable). -->
+<style>
+ :root{
+  --bg:#05070d;--void:#080c14;--panel:#0b121b;--panel2:#0a121b;--line:#1b2734;
+  --proof:#3af4c8;--lattice:#5b8dee;--gold:#e8c074;--cream:#eef3f6;--para:#9fb1bf;
+  --warn:#e88a6a;--dim:#6c7d8c;
+ }
+ *{box-sizing:border-box}
+ html,body{margin:0;min-height:100%}
+ body{background:var(--bg);color:var(--cream);
+  font:14px/1.55 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;
+  overflow-x:hidden;position:relative}
+ /* Holographic void backdrop: radial proof-glow + faint lattice grid + slow scan. */
+ body::before{content:"";position:fixed;inset:0;z-index:-2;
+  background:
+   radial-gradient(120% 90% at 50% -10%,rgba(58,244,200,.10),transparent 60%),
+   radial-gradient(90% 70% at 90% 110%,rgba(91,141,238,.08),transparent 60%),
+   var(--bg)}
+ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+   linear-gradient(rgba(58,244,200,.035) 1px,transparent 1px) 0 0/100% 34px,
+   linear-gradient(90deg,rgba(91,141,238,.03) 1px,transparent 1px) 0 0/34px 100%;
+  mask-image:radial-gradient(130% 100% at 50% 0%,#000 55%,transparent 100%);
+  animation:drift 22s linear infinite}
+ @keyframes drift{to{background-position:0 34px,34px 0}}
+ @media (prefers-reduced-motion:reduce){body::after{animation:none}}
+ .wrap{max-width:1040px;margin:0 auto;padding:22px 18px 48px}
+ header{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px}
+ .eyebrow{font:10.5px ui-monospace,monospace;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--gold);opacity:.9}
+ h1{font-size:clamp(20px,3.6vw,30px);margin:.35em 0 .15em;letter-spacing:.3px;
+  text-shadow:0 0 22px rgba(58,244,200,.22)}
+ .lede{color:var(--para);max-width:70ch;margin:.2em 0 0;font-size:14.5px}
+ .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+ .badge{font:10.5px ui-monospace,monospace;padding:3px 9px;border-radius:6px;
+  border:1px solid var(--line);color:var(--para);background:#10171f;white-space:nowrap}
+ .badge b{color:var(--gold);font-weight:600}
+ .badge.proof{border-color:#20323e;color:var(--proof)}
+ #status{font:11px ui-monospace,monospace;padding:3px 9px;border-radius:6px;
+  border:1px solid var(--line);background:#10171f;white-space:nowrap}
+ #status.ok{color:var(--proof);border-color:#20323e}
+ #status.bad{color:var(--warn);border-color:#3a2620}
+ #status.wait{color:var(--para)}
+ .note{border-left:2px solid var(--proof);padding:10px 14px;margin:0 0 24px;
+  background:linear-gradient(90deg,rgba(58,244,200,.06),transparent);
+  color:var(--cream);font-size:13.5px;border-radius:0 8px 8px 0}
+ .note b{color:var(--proof)}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+ .card{border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel),var(--void));
+  padding:15px 16px;position:relative;overflow:hidden}
+ .card::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--proof),transparent);opacity:.5}
+ .cat{font:10px ui-monospace,monospace;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--lattice)}
+ .card h3{margin:.35em 0 .5em;font-size:15px;color:var(--cream)}
+ .row{margin:.5em 0;font-size:12.8px}
+ .k{font:10px ui-monospace,monospace;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--dim);display:block;margin-bottom:1px}
+ .v{color:var(--para)}
+ .v.fires{color:var(--cream)}
+ .lineage{color:var(--gold)}
+ .doctrine{margin-top:26px;border:1px solid var(--line);border-radius:12px;
+  background:var(--void);padding:16px 18px}
+ .doctrine h2{font-size:14px;margin:0 0 12px;color:var(--cream);letter-spacing:.3px}
+ .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+ .dcell{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--panel2)}
+ .dcell .k{margin-bottom:3px}
+ .dcell .dv{font:12.5px ui-monospace,monospace;color:var(--proof)}
+ .dcell .dv.conj{color:var(--gold)}
+ .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+ .chip{font:10.5px ui-monospace,monospace;padding:2px 7px;border-radius:5px;
+  border:1px solid var(--line);color:var(--para);background:#0e1620}
+ footer{margin-top:34px;border-top:1px solid var(--line);padding-top:16px;
+  color:var(--dim);font:11px/1.7 ui-monospace,monospace}
+ footer a{color:var(--proof);text-decoration:none}
+ footer a:hover{text-decoration:underline}
+ .empty{color:var(--para);font-size:13.5px;padding:20px 0}
+ code{font:12px ui-monospace,monospace;color:var(--lattice);
+  background:#0e1620;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header>
+  <div class="eyebrow">SZL Holdings · Governed Norms · holographic roadmap surface</div>
+  <h1>WILLAY refusal classifiers</h1>
+  <p class="lede">The inverse of a removed or hidden classifier. Every governed-refusal
+   rule the a11oy conscience gate enforces is disclosed here — category, what it fires on,
+   its rationale, and its lineage. Fetched live and keyless; nothing here is fabricated.</p>
+  <div class="badges">
+   <span id="status" class="wait">PROBING a11oy…</span>
+   <span class="badge">label <b>REPORTED</b> · a11oy self-report</span>
+   <span class="badge proof">trust ceiling <b>0.97</b> · never 100%</span>
+   <span class="badge">Λ <b>Conjecture 1</b> · never green</span>
+   <span class="badge">0 runtime CDN</span>
+  </div>
+ </header>
+
+ <p class="note" id="honest-note">
+  <b>Honest by design.</b> This page relays a11oy's own health JSON verbatim — it does not
+  independently measure the model, so every value is labelled <b>REPORTED</b>. If the
+  endpoint is unreachable it says <b>UNAVAILABLE</b>; it never shows a fabricated green.
+ </p>
+
+ <div class="grid" id="classifiers">
+  <p class="empty">Loading classifiers from
+   <code>a11oy /api/a11oy/v1/willay/classifiers</code>…</p>
+ </div>
+
+ <section class="doctrine" id="doctrine" hidden>
+  <h2>Doctrine block <span style="color:var(--dim);font-weight:400;font-size:11px">— REPORTED from a11oy</span></h2>
+  <div class="dgrid" id="dgrid"></div>
+  <div style="margin-top:12px">
+   <span class="k">Locked-proven theorems</span>
+   <div class="chips" id="theorems"></div>
+  </div>
+  <p style="margin:12px 0 0;color:var(--para);font-size:12.5px" id="parity"></p>
+ </section>
+
+ <footer>
+  <div>Source endpoint (keyless): <a href="https://szlholdings-a11oy.hf.space/api/a11oy/v1/willay/classifiers" target="_blank" rel="noopener">a11oy /willay/classifiers</a> · relayed as <b>REPORTED</b>, never measured here.</div>
+  <div>SZL Holdings · governed AI you can prove · <a href="https://a-11-oy.com" target="_blank" rel="noopener">a-11-oy.com</a> · <a href="https://huggingface.co/SZLHOLDINGS" target="_blank" rel="noopener">🤗 SZLHOLDINGS</a> · Λ = Conjecture 1, never a theorem · trust ceiling 0.97.</div>
+ </footer>
+</div>
+
+<script>
+const EP = "https://szlholdings-a11oy.hf.space/api/a11oy/v1/willay/classifiers";
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function setStatus(cls,txt){const el=$("#status");el.className=cls;el.textContent=txt;}
+
+function renderClassifiers(list){
+ const host = $("#classifiers");
+ if(!Array.isArray(list) || !list.length){
+  host.innerHTML = '<p class="empty">No classifiers returned — <b>UNAVAILABLE</b>.</p>';
+  return;
+ }
+ host.innerHTML = list.map(c=>`
+  <article class="card">
+   <div class="cat">${esc(c.category)}</div>
+   <h3>${esc(c.title)}</h3>
+   <div class="row"><span class="k">Fires on</span><span class="v fires">${esc(c.fires_on)}</span></div>
+   <div class="row"><span class="k">Rationale</span><span class="v">${esc(c.rationale)}</span></div>
+   <div class="row"><span class="k">Lineage</span><span class="v lineage">${esc(c.lineage)}</span></div>
+  </article>`).join("");
+}
+
+function renderDoctrine(d,trust,parity){
+ if(!d) return;
+ $("#doctrine").hidden = false;
+ const cells = [
+  ["doctrine version", esc(d.version), false],
+  ["counts (proven/…/…)", esc(d.counts), false],
+  ["locked count", esc(d.locked_count), false],
+  ["kernel commit", esc(d.kernel_commit), false],
+  ["trust ceiling", esc(trust), false],
+  ["Λ (lambda)", esc(d.lambda), true],
+  ["Khipu", esc(d.khipu), true],
+  ["SLSA", esc(d.slsa), false],
+ ];
+ $("#dgrid").innerHTML = cells.map(([k,v,conj])=>
+  `<div class="dcell"><span class="k">${k}</span><span class="dv${conj?' conj':''}">${v||"—"}</span></div>`).join("");
+ const th = Array.isArray(d.locked_theorems)?d.locked_theorems:[];
+ $("#theorems").innerHTML = th.map(t=>`<span class="chip">${esc(t)}</span>`).join("") || '<span class="chip">—</span>';
+ if(parity) $("#parity").innerHTML = "<b style='color:var(--para)'>Parity note:</b> "+esc(parity);
+}
+
+async function load(){
+ try{
+  const ctl = new AbortController();
+  const t = setTimeout(()=>ctl.abort(), 12000);
+  const r = await fetch(EP, {signal:ctl.signal, cache:"no-store"});
+  clearTimeout(t);
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const data = await r.json();
+  renderClassifiers(data.classifiers);
+  renderDoctrine(data.doctrine, data.trust_ceiling, data.fable_parity);
+  if(data.honest_note) $("#honest-note").innerHTML = "<b>Honest by design.</b> "+esc(data.honest_note);
+  const n = Array.isArray(data.classifiers)?data.classifiers.length:0;
+  setStatus("ok", "REPORTED · "+n+" classifiers LIVE from a11oy");
+ }catch(e){
+  setStatus("bad", "UNAVAILABLE — a11oy /willay/classifiers unreachable");
+  $("#classifiers").innerHTML =
+   '<p class="empty"><b>UNAVAILABLE.</b> Could not reach the a11oy conscience gate '+
+   '(<code>'+esc(String(e.message||e))+'</code>). No cached or fabricated values are shown — '+
+   'an honest blank is the correct state when the source is down.</p>';
+ }
+}
+load();
+</script>
+</body>
+</html>
