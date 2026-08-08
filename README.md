@@ -1,3 +1,21 @@
+---
+title: Governed Norms - WILLAY classifiers
+emoji: "🛡️"
+colorFrom: green
+colorTo: gray
+sdk: static
+app_file: index.html
+pinned: false
+license: apache-2.0
+short_description: Inspectable holographic view of a11oy WILLAY classifiers
+tags:
+  - governance
+  - safety
+  - refusal-classifiers
+  - honest-by-design
+  - holographic
+---
+
 # governed-norm-holo
 
 Holographic, **inspectable** rendering of the a11oy **WILLAY** refusal classifiers — the
