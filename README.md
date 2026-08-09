@@ -24,7 +24,7 @@ governed-refusal norms. The inverse of a hidden classifier: every rule discloses
 
 **Status:** ROADMAP → **LIVE**. Shipped as a static Hugging Face Space:
 **[SZLHOLDINGS/governed-norm-holo](https://huggingface.co/spaces/SZLHOLDINGS/governed-norm-holo)**
-→ <https://szlholdings-governed-norm-holo.hf.space>
+→ <https://szlholdings-governed-norm-holo.static.hf.space>
 
 ## What it does
 
