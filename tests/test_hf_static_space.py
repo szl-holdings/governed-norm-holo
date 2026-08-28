@@ -419,7 +419,19 @@ def guard_responder(
         if path == f"/repos/{repository}/branches/main":
             branch_calls += 1
             return {"commit": {"sha": SOURCE_SHA if branch_calls == 1 else final_main_sha}}
-        if path == f"/repos/{repository}/commits/{SOURCE_SHA}/pulls":
+        if path == f"/repos/{repository}/pulls":
+            expected_inventory_query = {
+                "state": ["closed"],
+                "base": ["main"],
+                "sort": ["updated"],
+                "direction": ["desc"],
+                "per_page": [str(MODULE.GITHUB_PER_PAGE)],
+            }
+            for key, value in expected_inventory_query.items():
+                if query.get(key) != value:
+                    raise AssertionError(
+                        f"guard omitted exact closed-PR inventory query {key}"
+                    )
             page = int(query.get("page", ["1"])[0])
             if page == 1:
                 associated_scan += 1
@@ -890,18 +902,7 @@ class StaticSpaceContractTests(unittest.TestCase):
             "GITHUB_TOKEN": "github-test-token",
             "GITHUB_API_URL": "https://api.github.test",
         }
-        candidate = {
-            "id": 70,
-            "number": 7,
-            "state": "closed",
-            "merged_at": "2026-08-10T00:00:00Z",
-            "merge_commit_sha": SOURCE_SHA,
-            "base": {
-                "ref": "main",
-                "sha": PARENT_SHA,
-                "repo": {"full_name": repository},
-            },
-        }
+        candidate = exact_merged_pull(repository)
         noise = [{"id": 1000 + index, "state": "open"} for index in range(100)]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -928,18 +929,7 @@ class StaticSpaceContractTests(unittest.TestCase):
             "GITHUB_TOKEN": "github-test-token",
             "GITHUB_API_URL": "https://api.github.test",
         }
-        candidate = {
-            "id": 70,
-            "number": 7,
-            "state": "closed",
-            "merged_at": "2026-08-10T00:00:00Z",
-            "merge_commit_sha": SOURCE_SHA,
-            "base": {
-                "ref": "main",
-                "sha": PARENT_SHA,
-                "repo": {"full_name": repository},
-            },
-        }
+        candidate = exact_merged_pull(repository)
         second = copy.deepcopy(candidate)
         second.update({"id": 71, "number": 8})
         noise = [{"id": 1000 + index, "state": "open"} for index in range(99)]
@@ -2527,44 +2517,40 @@ class WorkflowBoundaryTests(unittest.TestCase):
             },
         )
 
-    def test_attestation_downloads_follow_exact_channels_after_failed_producers(self) -> None:
+    def test_attestation_downloads_reject_missing_producer_channels(self) -> None:
         steps = {
             step["name"]: step
             for step in self.workflow["jobs"]["attest"]["steps"]
         }
-        cases = {
+        self.assertEqual(
+            steps["Download exact publisher outcome"]["if"],
+            "always() && needs.deploy.outputs.publication-artifact-name != ''",
+        )
+        self.assertEqual(
+            steps["Download exact public measurement"]["if"],
+            "always() && needs.measure.outputs.measurement-artifact-name != ''",
+        )
+
+    def test_attestation_downloads_preserve_named_failure_evidence(self) -> None:
+        steps = {
+            step["name"]: step
+            for step in self.workflow["jobs"]["attest"]["steps"]
+        }
+        expected_channels = {
             "Download exact publisher outcome": (
-                "always() && needs.deploy.outputs.publication-artifact-name != ''",
-                "${{ needs.deploy.outputs.publication-artifact-name }}",
+                "needs.deploy.outputs.publication-artifact-name"
             ),
             "Download exact public measurement": (
-                "always() && needs.measure.outputs.measurement-artifact-name != ''",
-                "${{ needs.measure.outputs.measurement-artifact-name }}",
+                "needs.measure.outputs.measurement-artifact-name"
             ),
         }
-        for name, (condition, artifact_name) in cases.items():
+        for name, channel in expected_channels.items():
             with self.subTest(step=name):
                 step = steps[name]
-                self.assertEqual(step["if"], condition)
+                self.assertEqual(step["if"], f"always() && {channel} != ''")
+                self.assertEqual(step["with"]["name"], "${{ " + channel + " }}")
                 self.assertNotIn(".result", step["if"])
-                self.assertEqual(step["with"]["name"], artifact_name)
-
-    def test_attestation_downloads_never_fall_back_to_download_all(self) -> None:
-        steps = {
-            step["name"]: step
-            for step in self.workflow["jobs"]["attest"]["steps"]
-        }
-        for name in (
-            "Download exact publisher outcome",
-            "Download exact public measurement",
-        ):
-            with self.subTest(step=name):
-                step = steps[name]
-                self.assertEqual(set(step["with"]), {"name", "path"})
-                self.assertIn("outputs.", step["with"]["name"])
-                self.assertIn("!= ''", step["if"])
-                self.assertNotIn("pattern", step["with"])
-                self.assertNotIn("merge-multiple", step["with"])
+                self.assertIs(step["continue-on-error"], True)
 
     def test_publish_path_is_bound_without_an_unset_step_environment(self) -> None:
         steps = {
