@@ -1,0 +1,110 @@
+name: Diagnose exact governed merge tuple
+
+on:
+  push:
+    branches:
+      - ops/diagnose-governed-merge-20260828
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_SHA: 068a56fd387ce3baa0e006d2336a2c916ddbe7f9
+      EXPECTED_PARENT: 5dd73429780ac105aa971574d938c82c2df129f8
+      GITHUB_API_VERSION_EXACT: 2026-03-10
+    steps:
+      - name: Read exact API identities without provider credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I - <<'PY'
+          from __future__ import annotations
+          import json
+          import os
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          api = os.environ['GITHUB_API_URL'].rstrip('/')
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GITHUB_TOKEN']
+          target = os.environ['TARGET_SHA']
+          expected_parent = os.environ['EXPECTED_PARENT']
+          version = os.environ['GITHUB_API_VERSION_EXACT']
+
+          def get(path: str):
+              request = Request(
+                  api + path,
+                  headers={
+                      'Accept': 'application/vnd.github+json',
+                      'Authorization': f'Bearer {token}',
+                      'X-GitHub-Api-Version': version,
+                      'User-Agent': 'szl-governed-merge-diagnostic',
+                  },
+              )
+              with urlopen(request, timeout=30) as response:
+                  return json.loads(response.read().decode('utf-8'))
+
+          events = get(f'/repos/{repo}/events?per_page=100')
+          pushes = []
+          for event in events if isinstance(events, list) else []:
+              payload = event.get('payload') if isinstance(event, dict) else None
+              if (
+                  isinstance(payload, dict)
+                  and event.get('type') == 'PushEvent'
+                  and payload.get('head') == target
+              ):
+                  pushes.append({
+                      'event_id': event.get('id'),
+                      'created_at': event.get('created_at'),
+                      'ref': payload.get('ref'),
+                      'before': payload.get('before'),
+                      'head': payload.get('head'),
+                      'size': payload.get('size'),
+                  })
+
+          commit = get(f'/repos/{repo}/commits/{target}')
+          parents = [row.get('sha') for row in commit.get('parents', []) if isinstance(row, dict)]
+          associated = get(f'/repos/{repo}/commits/{target}/pulls?per_page=100&page=1')
+          rows = []
+          for row in associated if isinstance(associated, list) else []:
+              base = row.get('base') if isinstance(row, dict) else None
+              base_repo = base.get('repo') if isinstance(base, dict) else None
+              head = row.get('head') if isinstance(row, dict) else None
+              head_repo = head.get('repo') if isinstance(head, dict) else None
+              rows.append({
+                  'id': row.get('id'),
+                  'number': row.get('number'),
+                  'state': row.get('state'),
+                  'merged_at': row.get('merged_at'),
+                  'merge_commit_sha': row.get('merge_commit_sha'),
+                  'base_ref': base.get('ref') if isinstance(base, dict) else None,
+                  'base_sha': base.get('sha') if isinstance(base, dict) else None,
+                  'base_repo_full_name': base_repo.get('full_name') if isinstance(base_repo, dict) else None,
+                  'base_repo_id': base_repo.get('id') if isinstance(base_repo, dict) else None,
+                  'head_ref': head.get('ref') if isinstance(head, dict) else None,
+                  'head_sha': head.get('sha') if isinstance(head, dict) else None,
+                  'head_repo_full_name': head_repo.get('full_name') if isinstance(head_repo, dict) else None,
+                  'head_repo_id': head_repo.get('id') if isinstance(head_repo, dict) else None,
+              })
+
+          diagnostic = {
+              'schema': 'szl.github-merge-tuple-diagnostic/v1',
+              'api_version': version,
+              'repository': repo,
+              'target': target,
+              'expected_parent': expected_parent,
+              'commit_parents': parents,
+              'matching_push_events': pushes,
+              'associated_count': len(rows),
+              'associated': rows,
+          }
+          print('SZL_DIAGNOSTIC=' + json.dumps(diagnostic, sort_keys=True, separators=(',', ':')))
+          PY
