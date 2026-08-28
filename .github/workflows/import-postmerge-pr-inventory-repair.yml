@@ -1,0 +1,78 @@
+name: Import exact post-merge PR inventory repair
+
+on:
+  push:
+    branches:
+      - fix/postmerge-pr-inventory-v2-20260828
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout governed-norm repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Import immutable generic guard and tests
+        shell: bash
+        env:
+          LAMBDA_REPOSITORY: https://github.com/szl-holdings/lambda-gate-holo.git
+          LAMBDA_REVISION: fafc388b40e80cb03c73b17acb73f5e9cd9702f0
+        run: |
+          set -euo pipefail
+          source_dir="${RUNNER_TEMP}/lambda-gate-holo"
+          git init "$source_dir"
+          git -C "$source_dir" remote add origin "$LAMBDA_REPOSITORY"
+          git -C "$source_dir" fetch --depth=1 origin "$LAMBDA_REVISION"
+          git -C "$source_dir" checkout --detach FETCH_HEAD
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$LAMBDA_REVISION"
+
+          cp "$source_dir/scripts/hf_static_space.py" scripts/hf_static_space.py
+          cp "$source_dir/tests/test_hf_static_space.py" tests/test_hf_static_space.py
+          cp "$source_dir/tests/test_postmerge_pr_inventory.py" tests/test_postmerge_pr_inventory.py
+          rm tasks/HF_STATIC_SPACE_POSTMERGE_AUTHORITY_20260828.md
+          git diff --check
+
+      - name: Run exact governed-norm validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements/hf-validator.lock
+          python -m py_compile scripts/hf_static_space.py tests/test_hf_static_space.py tests/test_postmerge_pr_inventory.py
+          python -m unittest discover -s tests -v
+          git diff --check
+
+      - name: Commit and push the repaired branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Lutar, Stephen P.'
+          git config user.email 'stephenlutar2@gmail.com'
+          git add scripts/hf_static_space.py tests/test_hf_static_space.py tests/test_postmerge_pr_inventory.py tasks/HF_STATIC_SPACE_POSTMERGE_AUTHORITY_20260828.md
+          git diff --cached --check
+          git commit -F - <<'EOF'
+          fix(release): bind post-merge PR inventory exactly
+
+          Replace the unstable merge-commit association projection with a
+          bounded complete closed-main PR inventory keyed to the exact squash
+          revision, push parent, repository identity, and candidate head.
+
+          Preserve full PR readback, exact head association, workflow attempts,
+          check suites, DCO, body evidence, and final inventory equality. Add
+          adversarial singleton, ambiguity, unrelated-row, malformed-tuple, and
+          authority-input coverage.
+
+          Source-equivalent to Lambda implementation
+          fafc388b40e80cb03c73b17acb73f5e9cd9702f0.
+
+          Signed-off-by: Lutar, Stephen P. <stephenlutar2@gmail.com>
+          EOF
+          git push origin "HEAD:${GITHUB_REF_NAME}"
