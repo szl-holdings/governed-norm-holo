@@ -1,0 +1,285 @@
+name: Rebuild public merge-revision rebind
+
+on:
+  push:
+    branches:
+      - fix/public-merge-revision-rebind-20260828
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-public-merge-revision-rebind-20260828
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    if: github.repository == 'szl-holdings/governed-norm-holo' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact staging branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Cross-bind redacted and public merge projections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("scripts/hf_static_space.py")
+          source = source_path.read_text(encoding="utf-8")
+
+          old_signature = '''def _exact_merged_pull_projection(
+              pull: object,
+              candidate: dict,
+              repository: str,
+              repository_id: int,
+              before_sha: str,
+              source_sha: str,
+          ) -> dict:
+          '''
+          new_signature = '''def _exact_merged_pull_projection(
+              pull: object,
+              candidate: dict,
+              repository: str,
+              repository_id: int,
+              before_sha: str,
+              source_sha: str,
+              *,
+              allow_redacted_merge_revision: bool = False,
+          ) -> dict:
+          '''
+          if source.count(old_signature) != 1:
+              raise SystemExit("exact merged-pull projection signature drifted")
+          source = source.replace(old_signature, new_signature, 1)
+
+          old_condition = '        or pull.get("merge_commit_sha") != source_sha\n'
+          new_condition = '''        or (
+                      pull.get("merge_commit_sha") != source_sha
+                      and not (
+                          allow_redacted_merge_revision
+                          and pull.get("merge_commit_sha") is None
+                      )
+                  )
+          '''
+          if source.count(old_condition) != 1:
+              raise SystemExit("merge-revision condition drifted")
+          source = source.replace(old_condition, new_condition, 1)
+
+          helper_anchor = "\n\ndef _merged_pull_candidate_is_exact("
+          if source.count(helper_anchor) != 1:
+              raise SystemExit("public-rebind helper anchor drifted")
+          helper = r'''
+
+          def _exact_merged_pull_projection_with_public_rebind(
+              pull: object,
+              candidate: dict,
+              repository: str,
+              repository_id: int,
+              before_sha: str,
+              source_sha: str,
+          ) -> dict:
+              authenticated_evidence = _exact_merged_pull_projection(
+                  pull,
+                  candidate,
+                  repository,
+                  repository_id,
+                  before_sha,
+                  source_sha,
+                  allow_redacted_merge_revision=True,
+              )
+              authenticated_merge_revision = (
+                  pull.get("merge_commit_sha") if isinstance(pull, dict) else None
+              )
+              if authenticated_merge_revision == source_sha:
+                  return authenticated_evidence
+              if authenticated_merge_revision is not None:
+                  raise ContractError(
+                      "authenticated merged pull-request revision is neither exact nor redacted"
+                  )
+              number = candidate.get("number")
+              if type(number) is not int or number <= 0:
+                  raise ContractError("public merged pull-request number is malformed")
+              public_url = (
+                  f"{PUBLIC_GITHUB_API_ROOT}/repos/{repository}/pulls/{number}"
+              )
+              public_pull = _request_json(public_url)
+              public_evidence = _exact_merged_pull_projection(
+                  public_pull,
+                  candidate,
+                  repository,
+                  repository_id,
+                  before_sha,
+                  source_sha,
+              )
+              if canonical_json(public_evidence) != canonical_json(
+                  authenticated_evidence
+              ):
+                  raise ContractError(
+                      "public merged pull-request readback does not match authenticated projection"
+                  )
+              return public_evidence
+          '''
+          source = source.replace(helper_anchor, helper + helper_anchor, 1)
+
+          old_candidate = '        and row.get("merge_commit_sha") == source_sha\n'
+          new_candidate = '''        and row.get("merge_commit_sha") in {None, source_sha}
+          '''
+          if source.count(old_candidate) != 1:
+              raise SystemExit("candidate merge-revision predicate drifted")
+          source = source.replace(old_candidate, new_candidate, 1)
+
+          old_initial = "        pull_evidence = _exact_merged_pull_projection(\n"
+          new_initial = (
+              "        pull_evidence = "
+              "_exact_merged_pull_projection_with_public_rebind(\n"
+          )
+          if source.count(old_initial) != 1:
+              raise SystemExit("initial merged-pull call drifted")
+          source = source.replace(old_initial, new_initial, 1)
+
+          old_final = "        final_pull_evidence = _exact_merged_pull_projection(\n"
+          new_final = (
+              "        final_pull_evidence = "
+              "_exact_merged_pull_projection_with_public_rebind(\n"
+          )
+          if source.count(old_final) != 1:
+              raise SystemExit("final merged-pull call drifted")
+          source = source.replace(old_final, new_final, 1)
+          source_path.write_text(source, encoding="utf-8")
+
+          tests_path = Path("tests/test_hf_static_space.py")
+          tests = tests_path.read_text(encoding="utf-8")
+          test_anchor = "\n\nclass WorkflowBoundaryTests(unittest.TestCase):"
+          if tests.count(test_anchor) != 1:
+              raise SystemExit("protected test insertion anchor drifted")
+          additions = r'''
+
+          class PublicMergeRevisionRebindTests(unittest.TestCase):
+              def setUp(self) -> None:
+                  self.repository = MODULE.load_config()["source_repository"]
+                  self.repository_id = MODULE.TARGET_REPOSITORY_IDS[self.repository]
+                  self.candidate = exact_merged_pull(self.repository)
+
+              def project(self, pull: dict) -> dict:
+                  return MODULE._exact_merged_pull_projection_with_public_rebind(
+                      pull,
+                      self.candidate,
+                      self.repository,
+                      self.repository_id,
+                      PARENT_SHA,
+                      SOURCE_SHA,
+                  )
+
+              def test_authenticated_exact_merge_does_not_need_public_rebind(self) -> None:
+                  with mock.patch.object(MODULE, "_request_json") as request:
+                      evidence = self.project(copy.deepcopy(self.candidate))
+                  request.assert_not_called()
+                  self.assertEqual(evidence["merge_revision"], SOURCE_SHA)
+
+              def test_redacted_authenticated_merge_requires_exact_public_rebind(self) -> None:
+                  authenticated = copy.deepcopy(self.candidate)
+                  authenticated["merge_commit_sha"] = None
+                  public = copy.deepcopy(self.candidate)
+                  with mock.patch.object(
+                      MODULE, "_request_json", return_value=public
+                  ) as request:
+                      evidence = self.project(authenticated)
+                  request.assert_called_once_with(
+                      f"{MODULE.PUBLIC_GITHUB_API_ROOT}/repos/"
+                      f"{self.repository}/pulls/7"
+                  )
+                  self.assertEqual(evidence["merge_revision"], SOURCE_SHA)
+
+              def test_public_rebind_rejects_common_projection_drift(self) -> None:
+                  authenticated = copy.deepcopy(self.candidate)
+                  authenticated["merge_commit_sha"] = None
+                  public = copy.deepcopy(self.candidate)
+                  public["merged_by"]["login"] = "different-merger"
+                  with mock.patch.object(
+                      MODULE, "_request_json", return_value=public
+                  ):
+                      with self.assertRaisesRegex(
+                          MODULE.ContractError, "does not match authenticated projection"
+                      ):
+                          self.project(authenticated)
+
+              def test_public_rebind_rejects_wrong_public_merge_revision(self) -> None:
+                  authenticated = copy.deepcopy(self.candidate)
+                  authenticated["merge_commit_sha"] = None
+                  public = copy.deepcopy(self.candidate)
+                  public["merge_commit_sha"] = TARGET_SHA
+                  with mock.patch.object(
+                      MODULE, "_request_json", return_value=public
+                  ):
+                      with self.assertRaisesRegex(
+                          MODULE.ContractError, "merged pull-request tuple is not exact"
+                      ):
+                          self.project(authenticated)
+
+              def test_candidate_selector_accepts_only_null_or_exact_merge_revision(self) -> None:
+                  redacted = copy.deepcopy(self.candidate)
+                  redacted["merge_commit_sha"] = None
+                  selected = MODULE._select_exact_merged_pull(
+                      [redacted],
+                      self.repository,
+                      self.repository_id,
+                      PARENT_SHA,
+                      SOURCE_SHA,
+                  )
+                  self.assertIs(selected, redacted)
+                  wrong = copy.deepcopy(self.candidate)
+                  wrong["merge_commit_sha"] = TARGET_SHA
+                  with self.assertRaisesRegex(MODULE.ContractError, "unambiguous"):
+                      MODULE._select_exact_merged_pull(
+                          [wrong],
+                          self.repository,
+                          self.repository_id,
+                          PARENT_SHA,
+                          SOURCE_SHA,
+                      )
+          '''
+          tests = tests.replace(test_anchor, additions + test_anchor, 1)
+          tests_path.write_text(tests, encoding="utf-8")
+
+          bootstrap = Path(".github/workflows/rebuild-public-merge-rebind.yml")
+          if not bootstrap.is_file():
+              raise SystemExit("bounded rebuild workflow is missing")
+          bootstrap.unlink()
+          PY
+
+      - name: Set up exact Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+          check-latest: false
+
+      - name: Validate the complete protected release contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements/hf-validator.lock
+          python -m py_compile scripts/hf_static_space.py tests/test_hf_static_space.py
+          python -m unittest discover -s tests -v
+          git diff --check
+
+      - name: Commit validated source and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Lutar, Stephen P.'
+          git config user.email 'stephenlutar2@gmail.com'
+          git add -A
+          test ! -e .github/workflows/rebuild-public-merge-rebind.yml
+          git diff --cached --check
+          git commit \
+            -m "fix(release): rebind redacted merge revision publicly" \
+            -m "Accept only GitHub's observed null merge_commit_sha redaction in authenticated projections, require the anonymous public singleton to expose the exact protected squash revision, canonicalize both projections to identical evidence, preserve every existing workflow, DCO, body, head-association, inventory, and public-main gate, and remove this bounded rebuild workflow." \
+            -m "Signed-off-by: Lutar, Stephen P. <stephenlutar2@gmail.com>"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
